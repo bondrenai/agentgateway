@@ -1,0 +1,67 @@
+---
+source: crates/llm/src/golden_tests.rs
+description: src/tests/response/anthropic/max_tokens.json
+info:
+  id: msg_01L7wkPmHKnB3RTJqLKrFtYz
+  type: message
+  role: assistant
+  model: claude-opus-4-6
+  content:
+    - type: text
+      text: The answer begins
+  stop_reason: max_tokens
+  stop_sequence: ~
+  usage:
+    input_tokens: 18
+    output_tokens: 4
+    service_tier: standard
+---
+{
+  "response": {
+    "id": "[id]",
+    "status": "incomplete",
+    "output": [
+      {
+        "type": "message",
+        "content": [
+          {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": null,
+            "text": "The answer begins"
+          }
+        ],
+        "id": "[id]",
+        "role": "assistant",
+        "status": "incomplete"
+      }
+    ],
+    "model": "claude-opus-4-6",
+    "service_tier": "default",
+    "usage": {
+      "input_tokens": 18,
+      "output_tokens": 4,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 22
+    },
+    "created_at": "[date]",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "object": "response"
+  },
+  "parsed": {
+    "input_tokens": 18,
+    "output_tokens": 4,
+    "total_tokens": 22,
+    "reasoning_tokens": 0,
+    "cached_input_tokens": 0,
+    "service_tier": "default",
+    "provider_model": "claude-opus-4-6"
+  }
+}

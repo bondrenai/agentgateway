@@ -1,6 +1,10 @@
-use crate::http::auth::AppliedBackendAuthLocation;
+use http_body_util::BodyExt;
+use serde_json::json;
+
+use crate::http::auth::{AppliedBackendAuthLocation, BackendInfo};
 use crate::llm::anthropic::OAUTH_TOKEN_PREFIX;
-use crate::llm::{AIProvider, RouteType, anthropic};
+use crate::llm::{AIError, AIProvider, RequestResult, RouteType, anthropic};
+use crate::types::agent::{BackendTarget, Target};
 
 // ── set_required_fields integration tests ───────────────────────────────────
 
@@ -196,4 +200,67 @@ fn set_required_fields_keeps_client_anthropic_version() {
 		.unwrap();
 
 	assert_eq!(req.headers()["anthropic-version"], "2099-01-01");
+}
+
+// ── Responses clients ───────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn responses_requests_are_sent_as_buffered_messages() {
+	let provider = AIProvider::Anthropic(anthropic::Provider {
+		model_override: None,
+	});
+	let backend_info = BackendInfo {
+		target: BackendTarget::Invalid,
+		call_target: Target::from(("api.anthropic.com", 443)),
+		inputs: crate::test_helpers::proxymock::setup_proxy_test("{}")
+			.unwrap()
+			.pi,
+	};
+	let request = |body: serde_json::Value| {
+		::http::Request::builder()
+			.uri("/v1/responses")
+			.header(::http::header::CONTENT_TYPE, "application/json")
+			.body(crate::http::Body::from(serde_json::to_vec(&body).unwrap()))
+			.unwrap()
+	};
+
+	let RequestResult::Success {
+		request: forwarded,
+		upstream_route_type,
+		..
+	} = provider
+		.process_responses_request(
+			&backend_info,
+			None,
+			request(json!({"model": "claude-opus-4-6", "input": "hello"})),
+			false,
+			&mut None,
+			None,
+		)
+		.await
+		.expect("Responses request should process")
+	else {
+		panic!("expected forwarded request");
+	};
+	assert_eq!(upstream_route_type, RouteType::Messages);
+	let forwarded = forwarded.collect().await.unwrap().to_bytes();
+	let forwarded: serde_json::Value = serde_json::from_slice(&forwarded).unwrap();
+	assert_eq!(
+		forwarded["messages"],
+		json!([{"role": "user", "content": [{"type": "text", "text": "hello"}]}])
+	);
+
+	// The Messages event stream is not translated, so streaming is refused up front.
+	let err = provider
+		.process_responses_request(
+			&backend_info,
+			None,
+			request(json!({"model": "claude-opus-4-6", "input": "hello", "stream": true})),
+			false,
+			&mut None,
+			None,
+		)
+		.await
+		.expect_err("streaming Responses request should be refused");
+	assert!(matches!(err, AIError::UnsupportedConversion(_)), "{err}");
 }

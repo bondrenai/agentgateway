@@ -309,17 +309,17 @@ fn invalid_request_error(bytes: &[u8]) -> Result<bytes::Bytes, AIError> {
 /// thinking blocks. Replay needs only this, as clients may drop `content`.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum ReasoningCarrier {
+pub(crate) enum ReasoningCarrier {
 	Thinking { thinking: String, signature: String },
 	RedactedThinking { data: String },
 }
 
 impl ReasoningCarrier {
-	fn encode(self) -> String {
+	pub(crate) fn encode(self) -> String {
 		serde_json::to_string(&[self]).expect("serializing strings cannot fail")
 	}
 
-	fn decode(carrier: &str) -> Option<Vec<Self>> {
+	pub(crate) fn decode(carrier: &str) -> Option<Vec<Self>> {
 		serde_json::from_str(carrier).ok()
 	}
 

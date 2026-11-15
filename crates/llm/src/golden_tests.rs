@@ -234,15 +234,16 @@ mod requests {
 	const RESPONSES_REQUESTS: &[(&str, &[&str])] = &[
 		("namespace-tools", &[BEDROCK, GEMINI]),
 		("namespace-tools-long", &[BEDROCK]),
-		("basic", &[BEDROCK, GEMINI]),
-		("instructions", &[BEDROCK, GEMINI]),
-		("input-list", &[BEDROCK, GEMINI]),
+		("basic", &[BEDROCK, GEMINI, ANTHROPIC]),
+		("instructions", &[BEDROCK, GEMINI, ANTHROPIC]),
+		("input-list", &[BEDROCK, GEMINI, ANTHROPIC]),
 		("codex-assistant-history", &[BEDROCK, GEMINI]),
-		("parallel-tool-call", &[BEDROCK, GEMINI]),
-		("structured-output", &[BEDROCK]),
-		("input-media", &[BEDROCK]),
+		("parallel-tool-call", &[BEDROCK, GEMINI, ANTHROPIC]),
+		("structured-output", &[BEDROCK, ANTHROPIC]),
+		("input-media", &[BEDROCK, ANTHROPIC]),
 		("cache_control", &[BEDROCK, GEMINI]),
 		("cache_control_tool_outputs", &[BEDROCK]),
+		("tool-loop-replay", &[ANTHROPIC]),
 	];
 	const COUNT_TOKENS_REQUESTS: &[(&str, &[&str])] = &[
 		("basic", &[ANTHROPIC, BEDROCK, VERTEX]),
@@ -443,6 +444,10 @@ mod requests {
 			guardrail_version: None,
 			endpoint_preference: Default::default(),
 		};
+		let catalog = model_catalog::TestCatalog::new([(
+			"claude-opus-4-6",
+			&[model_catalog::tags::ADAPTIVE_THINKING][..],
+		)]);
 		for (name, providers) in RESPONSES_REQUESTS {
 			let path = format!("requests/responses/{name}.json");
 			for provider in *providers {
@@ -453,6 +458,9 @@ mod requests {
 					}),
 					GEMINI => test_request(GEMINI, &path, |i| {
 						conversion::openai_compat::from_responses::translate(i)
+					}),
+					ANTHROPIC => test_request(ANTHROPIC, &path, |i| {
+						conversion::messages::from_responses::translate(i, None, Some(&catalog))
 					}),
 					other => panic!("unsupported provider in RESPONSES_REQUESTS: {other}"),
 				}
@@ -934,6 +942,7 @@ mod responses {
 	const MESSAGES_TO_MESSAGES: &str = "messages-messages";
 	const MESSAGES_TO_COMPLETIONS: &str = "messages-completions";
 	const MESSAGES_TO_DETECT: &str = "messages-detect";
+	const MESSAGES_TO_RESPONSES: &str = "messages-responses";
 	const BEDROCK_TO_COMPLETIONS: &str = "bedrock-completions";
 	const BEDROCK_TO_MESSAGES: &str = "bedrock-messages";
 	const BEDROCK_TO_RESPONSES: &str = "bedrock-responses";
@@ -971,6 +980,12 @@ mod responses {
 		("tool", ALL_ANTHROPIC),
 		("thinking", ALL_ANTHROPIC),
 		("multiple_text_blocks", ALL_ANTHROPIC),
+		// Responses clients are served buffered replies only.
+		("basic", &[MESSAGES_TO_RESPONSES]),
+		("tool", &[MESSAGES_TO_RESPONSES]),
+		("thinking", &[MESSAGES_TO_RESPONSES]),
+		("thinking_tool_use", &[MESSAGES_TO_RESPONSES]),
+		("max_tokens", &[MESSAGES_TO_RESPONSES]),
 	];
 	const ALL_COMPLETIONS: &[&str] = &[
 		COMPLETIONS_TO_COMPLETIONS,
@@ -1289,6 +1304,9 @@ mod responses {
 					}),
 					MESSAGES_TO_COMPLETIONS => test_response(provider, &path, |i| {
 						conversion::messages::from_completions::translate_response(&i)
+					}),
+					MESSAGES_TO_RESPONSES => test_response(provider, &path, |i| {
+						conversion::messages::from_responses::translate_response(&i)
 					}),
 					MESSAGES_TO_DETECT => test_response(provider, &path, |bytes| {
 						Ok(Box::new(

@@ -1,0 +1,254 @@
+---
+source: crates/llm/src/golden_tests.rs
+description: src/tests/requests/responses/tool-loop-replay.json
+info:
+  model: claude-opus-4-6
+  store: false
+  max_output_tokens: 2048
+  instructions: Report colours with the tool.
+  input:
+    - role: developer
+      content:
+        - type: input_text
+          text: Colour names are lower case.
+          prompt_cache_breakpoint:
+            mode: explicit
+    - role: user
+      content:
+        - type: input_text
+          text: What colour is this pixel?
+        - type: input_image
+          image_url: "data:image/png;base64,iVBORw0KGgo="
+    - type: reasoning
+      id: rs_signed
+      summary: []
+      content:
+        - type: reasoning_text
+          text: The pixel is red.
+      encrypted_content: "[{\"type\":\"thinking\",\"thinking\":\"The pixel is red.\",\"signature\":\"SIG-xyz==\"}]"
+      status: completed
+    - type: reasoning
+      id: rs_redacted
+      summary: []
+      encrypted_content: "[{\"type\":\"redacted_thinking\",\"data\":\"cmVkYWN0ZWQ=\"}]"
+    - type: message
+      id: msg_commentary
+      role: assistant
+      status: completed
+      phase: commentary
+      content:
+        - type: output_text
+          text: Reporting the colour.
+          annotations: []
+          logprobs: ~
+    - type: function_call
+      id: toolu_01
+      call_id: toolu_01
+      name: report_colour
+      arguments: "{\"colour\":\"Red\"}"
+      status: completed
+    - type: function_call_output
+      call_id: toolu_01
+      output: "Invalid input: colour must be lower case."
+    - type: reasoning
+      id: rs_other_provider
+      summary: []
+      encrypted_content: gAAAAABopaque-reasoning-from-another-provider
+    - type: reasoning
+      id: rs_unsigned
+      summary: []
+      content:
+        - type: reasoning_text
+          text: Unsigned reasoning cannot be replayed.
+    - role: user
+      content: Try again.
+  tools:
+    - type: function
+      name: report_colour
+      description: Report a colour.
+      parameters:
+        type: object
+        properties:
+          colour:
+            type: string
+        required:
+          - colour
+        additionalProperties: false
+      strict: true
+    - type: web_search
+  tool_choice:
+    type: function
+    name: report_colour
+  parallel_tool_calls: false
+  reasoning:
+    effort: high
+  service_tier: flex
+  text:
+    format:
+      type: json_schema
+      name: colour
+      schema:
+        type: object
+        properties:
+          colour:
+            type: string
+        required:
+          - colour
+        additionalProperties: false
+      strict: true
+---
+{
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What colour is this pixel?"
+          },
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": "image/png",
+              "data": "iVBORw0KGgo="
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "The pixel is red.",
+            "signature": "SIG-xyz=="
+          },
+          {
+            "type": "redacted_thinking",
+            "data": "cmVkYWN0ZWQ="
+          },
+          {
+            "type": "text",
+            "text": "Reporting the colour."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01",
+            "name": "report_colour",
+            "input": {
+              "colour": "Red"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01",
+            "content": "Invalid input: colour must be lower case."
+          },
+          {
+            "type": "text",
+            "text": "Try again."
+          }
+        ]
+      }
+    ],
+    "system": [
+      {
+        "type": "text",
+        "text": "Report colours with the tool."
+      },
+      {
+        "type": "text",
+        "text": "Colour names are lower case.",
+        "cache_control": {
+          "type": "ephemeral"
+        }
+      }
+    ],
+    "model": "claude-opus-4-6",
+    "max_tokens": 2048,
+    "tools": [
+      {
+        "name": "report_colour",
+        "description": "Report a colour.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "colour": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "colour"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      }
+    ],
+    "tool_choice": {
+      "type": "tool",
+      "name": "report_colour",
+      "disable_parallel_tool_use": true
+    },
+    "thinking": {
+      "type": "adaptive"
+    },
+    "output_config": {
+      "effort": "high",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "colour": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "colour"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "parsed": {
+    "input_format": "Responses",
+    "cache_convention": "InputIncludesCache",
+    "request_model": "claude-opus-4-6",
+    "provider": "anthropic",
+    "streaming": false,
+    "params": {
+      "max_tokens": 2048
+    },
+    "prompt": [
+      {
+        "role": "system",
+        "content": "Report colours with the tool."
+      },
+      {
+        "role": "developer",
+        "content": "Colour names are lower case."
+      },
+      {
+        "role": "user",
+        "content": "What colour is this pixel?"
+      },
+      {
+        "role": "assistant",
+        "content": "Reporting the colour."
+      },
+      {
+        "role": "user",
+        "content": "Try again."
+      }
+    ]
+  }
+}

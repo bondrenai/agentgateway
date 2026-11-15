@@ -399,7 +399,8 @@ static CHAT_TRANSLATIONS: LazyLock<Vec<ChatTranslation>> = LazyLock::new(|| {
 		// Responses
 		chat(InputFormat::Responses, ChatFormat::OpenAICompletions),
 		chat(InputFormat::Responses, ChatFormat::BedrockConverse),
-		// Missing: Responses -> Messages
+		// Buffered replies only, so it comes after the conversions that also stream.
+		chat(InputFormat::Responses, ChatFormat::AnthropicMessages),
 	]
 });
 
@@ -510,9 +511,9 @@ fn render_anthropic_messages(
 			}
 			serde_json::to_vec(&req).map_err(AIError::RequestMarshal)
 		},
-		types::ChatRequest::Responses(_) => Err(AIError::UnsupportedConversion(strng::literal!(
-			"responses to messages"
-		))),
+		types::ChatRequest::Responses(req) => {
+			conversion::messages::from_responses::translate(&req, ctx.prompt_caching, ctx.catalog)
+		},
 		types::ChatRequest::Gemini(_) => Err(AIError::UnsupportedConversion(strng::literal!(
 			"gemini to messages"
 		))),
@@ -671,6 +672,7 @@ impl ChatTranslation {
 				InputFormat::Completions => {
 					conversion::messages::from_completions::translate_response(bytes)
 				},
+				InputFormat::Responses => conversion::messages::from_responses::translate_response(bytes),
 				_ => Err(AIError::UnsupportedConversion(strng::format!(
 					"from {:?} to {:?}",
 					self.output,
@@ -902,6 +904,7 @@ impl ChatTranslation {
 					InputFormat::Completions => {
 						conversion::messages::from_completions::translate_error(bytes)
 					},
+					InputFormat::Responses => conversion::messages::from_responses::translate_error(bytes),
 					_ => unsupported(),
 				},
 				ChatErrorFormat::OpenAI => match self.input {

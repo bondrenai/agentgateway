@@ -544,7 +544,10 @@ pub mod from_completions {
 		serde_json::to_vec(&xlated).map_err(AIError::RequestMarshal)
 	}
 
-	fn apply_prompt_caching(req: &mut messages::Request, caching: &crate::PromptCachingConfig) {
+	pub(super) fn apply_prompt_caching(
+		req: &mut messages::Request,
+		caching: &crate::PromptCachingConfig,
+	) {
 		if has_cache_control(req) {
 			return;
 		}
@@ -1301,6 +1304,8 @@ pub mod from_completions {
 		parse::sse::append_done_on_success(body)
 	}
 }
+
+pub mod from_responses;
 
 fn translate_stop_reason(resp: &messages::StopReason) -> completions::FinishReason {
 	match resp {

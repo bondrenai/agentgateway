@@ -88,6 +88,15 @@ present.
 {"type": "input_file", "file_url": "data:application/pdf;base64,JVBERi0x..."}
 ```
 
+### Anthropic
+
+Requests are converted to Anthropic Messages. Only buffered responses are supported; `stream: true` is rejected.
+
+**Replaying reasoning**: a `reasoning` output item carries the provider's signed thinking in `encrypted_content`.
+Send the item back unchanged to preserve thinking across turns. Reasoning items without it are dropped.
+
+**`vendor_extensions.thinking_budget_tokens`**: enables thinking with the given budget, as for Bedrock.
+
 ## OpenAI Embeddings
 
 Provider parameters are set at the top level of the request.
