@@ -286,6 +286,50 @@ mod tests {
 				.is_none()
 		);
 	}
+
+	#[test]
+	fn openai_errors_keep_the_anthropic_type_and_message() {
+		let translate = |status: u16, body: &str| -> serde_json::Value {
+			let translated = from_completions::translate_error(
+				&Bytes::copy_from_slice(body.as_bytes()),
+				::http::StatusCode::from_u16(status).unwrap(),
+			)
+			.unwrap();
+			serde_json::from_slice(&translated).unwrap()
+		};
+		for (status, kind, code) in [
+			(400, "invalid_request_error", None),
+			(401, "authentication_error", Some("invalid_api_key")),
+			(402, "billing_error", Some("insufficient_quota")),
+			(403, "permission_error", None),
+			(404, "not_found_error", None),
+			(429, "rate_limit_error", Some("rate_limit_exceeded")),
+			(500, "api_error", None),
+			(529, "overloaded_error", Some("server_is_overloaded")),
+		] {
+			let body =
+				serde_json::json!({"type": "error", "error": {"type": kind, "message": "details"}});
+			let out = translate(status, &body.to_string());
+			assert_eq!(out["error"]["type"], kind);
+			assert_eq!(out["error"]["message"], "details");
+			assert_eq!(
+				out["error"].get("code").and_then(|c| c.as_str()),
+				code,
+				"{kind}"
+			);
+		}
+		// A body that is not an Anthropic error is typed by its status.
+		let out = translate(429, "slow down");
+		assert_eq!(
+			out["error"],
+			serde_json::json!({"type": "rate_limit_error", "message": "slow down", "code": "rate_limit_exceeded"})
+		);
+		let out = translate(502, "<html>Bad Gateway</html>");
+		assert_eq!(
+			out["error"],
+			serde_json::json!({"type": "api_error", "message": "<html>Bad Gateway</html>"})
+		);
+	}
 }
 
 fn anthropic_error_type(status: ::http::StatusCode) -> &'static str {
@@ -1021,17 +1065,31 @@ pub mod from_completions {
 		}
 	}
 
-	pub fn translate_error(bytes: &Bytes) -> Result<Bytes, AIError> {
-		let res = serde_json::from_slice::<messages::MessagesErrorResponse>(bytes).ok();
+	/// Translate an Anthropic error into the OpenAI error shape, keeping the provider's error type
+	/// and message. `code` is set where OpenAI has a well-known code for the same condition.
+	pub fn translate_error(bytes: &Bytes, status: ::http::StatusCode) -> Result<Bytes, AIError> {
+		let (r#type, message) = match serde_json::from_slice::<messages::MessagesErrorResponse>(bytes) {
+			Ok(res) => (res.error.r#type, res.error.message),
+			// Not an Anthropic error body, such as a plain-text reply from a proxy.
+			Err(_) => (
+				super::anthropic_error_type(status).to_string(),
+				String::from_utf8_lossy(bytes).into_owned(),
+			),
+		};
+		let code = match r#type.as_str() {
+			"authentication_error" => Some("invalid_api_key"),
+			"billing_error" => Some("insufficient_quota"),
+			"rate_limit_error" => Some("rate_limit_exceeded"),
+			"overloaded_error" => Some("server_is_overloaded"),
+			_ => None,
+		};
 		let m = completions::ChatCompletionErrorResponse {
 			event_id: None,
 			error: completions::ChatCompletionError {
-				r#type: Some("invalid_request_error".to_string()),
-				message: res
-					.map(|res| res.error.message)
-					.unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned()),
+				r#type: Some(r#type),
+				message,
 				param: None,
-				code: None,
+				code: code.map(|code| serde_json::Value::String(code.to_string())),
 				event_id: None,
 			},
 		};

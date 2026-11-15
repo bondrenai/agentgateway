@@ -902,9 +902,11 @@ impl ChatTranslation {
 				ChatErrorFormat::Anthropic => match self.input {
 					InputFormat::Messages => conversion::messages::translate_anthropic_error(bytes, status),
 					InputFormat::Completions => {
-						conversion::messages::from_completions::translate_error(bytes)
+						conversion::messages::from_completions::translate_error(bytes, status)
 					},
-					InputFormat::Responses => conversion::messages::from_responses::translate_error(bytes),
+					InputFormat::Responses => {
+						conversion::messages::from_responses::translate_error(bytes, status)
+					},
 					_ => unsupported(),
 				},
 				ChatErrorFormat::OpenAI => match self.input {

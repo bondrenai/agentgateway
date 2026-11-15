@@ -695,8 +695,8 @@ fn translate_response_internal(
 	response
 }
 
-pub fn translate_error(bytes: &Bytes) -> Result<Bytes, AIError> {
-	super::from_completions::translate_error(bytes)
+pub fn translate_error(bytes: &Bytes, status: ::http::StatusCode) -> Result<Bytes, AIError> {
+	super::from_completions::translate_error(bytes, status)
 }
 
 #[cfg(test)]
