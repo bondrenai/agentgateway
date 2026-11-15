@@ -61,33 +61,56 @@ config:
   database:
     url: postgres://agw:agw@{postgres}:5432/agw
   standardAttributes:
-    user:  'request.headers["x-bondren-tenant"]'
-    group: 'request.headers["x-bondren-purpose"]'
+    user:  'default(metadata.bondren_tenant, request.headers["x-bondren-tenant"])'
+    group: 'default(metadata.bondren_purpose, request.headers["x-bondren-purpose"])'
 llm:
   port: 4000
   models:
     - name: "gpt-conformance"
       provider: openai
+      requestTransformation: &stripInternalHeaders
+        metadata:
+          bondren_tenant: 'request.headers["x-bondren-tenant"]'
+          bondren_purpose: 'request.headers["x-bondren-purpose"]'
+          bondren_feature: 'request.headers["x-bondren-feature"]'
+          bondren_mode: 'request.headers["x-bondren-mode"]'
+          bondren_route: 'request.headers["x-bondren-route"]'
+          bondren_audio_duration_ms: 'request.headers["x-bondren-audio-duration-ms"]'
+          bondren_embedding_chars: 'request.headers["x-bondren-embedding-chars"]'
+        remove:
+          - x-bondren-tenant
+          - x-bondren-purpose
+          - x-bondren-feature
+          - x-bondren-mode
+          - x-bondren-route
+          - x-bondren-audio-duration-ms
+          - x-bondren-embedding-chars
       params: {{ baseUrl: "{stub}/openai/v1" }}
     - name: "text-embedding-conformance"
       provider: openai
+      requestTransformation: *stripInternalHeaders
       params: {{ baseUrl: "{stub}/openai/v1" }}
     - name: "claude-conformance"
       provider: anthropic
+      requestTransformation: *stripInternalHeaders
       params: {{ baseUrl: "{stub}/anthropic/v1" }}
     - name: "claude-conformance-legacy"
       provider: anthropic
+      requestTransformation: *stripInternalHeaders
       params: {{ baseUrl: "{stub}/anthropic/v1" }}
     - name: "claude-conformance-cached"
       provider: anthropic
+      requestTransformation: *stripInternalHeaders
       params: {{ baseUrl: "{stub}/anthropic/v1" }}
       promptCaching: {{}}
     - name: "gemini-conformance"
       provider: gemini
+      requestTransformation: *stripInternalHeaders
       params: {{ baseUrl: "{stub}/gemini" }}
     # Live mode. Selected by header so a stub-mode run can never reach a provider.
     - name: "claude-*"
       provider: anthropic
+      requestTransformation: *stripInternalHeaders
       matches:
         - headers:
             - name: x-bondren-route
@@ -95,12 +118,14 @@ llm:
     - name: "claude-*"
       provider: anthropic
       promptCaching: {{}}
+      requestTransformation: *stripInternalHeaders
       matches:
         - headers:
             - name: x-bondren-route
               value: {{ exact: live-cached }}
     - name: "gemini-*"
       provider: gemini
+      requestTransformation: *stripInternalHeaders
       matches:
         - headers:
             - name: x-bondren-route
@@ -109,13 +134,13 @@ frontendPolicies:
   accessLog:
     database:
       add:
-        bondren_feature: 'request.headers["x-bondren-feature"]'
-        bondren_mode: 'request.headers["x-bondren-mode"]'
-        bondren_route: 'request.headers["x-bondren-route"]'
+        bondren_feature: 'default(metadata.bondren_feature, request.headers["x-bondren-feature"])'
+        bondren_mode: 'default(metadata.bondren_mode, request.headers["x-bondren-mode"])'
+        bondren_route: 'default(metadata.bondren_route, request.headers["x-bondren-route"])'
 """
 
 ROW_COLUMNS = (
-    "http_status, gen_ai_provider_name, gen_ai_request_model, gen_ai_response_model, input_tokens, "
+    "http_status, error, has_payload, gen_ai_provider_name, gen_ai_request_model, gen_ai_response_model, input_tokens, "
     "output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, "
     "reasoning_tokens, cost, agentgateway_user, agentgateway_group, attributes_json"
 )
@@ -323,6 +348,9 @@ def upstream(lab, path, count=1):
     """The requests the stub received for the checks' last calls, all on the expected endpoint."""
     requests = lab.stub.take()
     same([r["path"] for r in requests], [path] * count, "upstream requests")
+    for r in requests:
+        leaked = sorted(k for k in r["headers"] if k.startswith("x-bondren-"))
+        same(leaked, [], "leaked internal x-bondren-* headers upstream")
     return requests if count != 1 else requests[0]
 
 
@@ -659,15 +687,61 @@ def gemini_image(lab):
 
 @stub_check
 def keys_are_not_recorded(lab):
-    """The caller's key is a credential for one upstream call. It must not reach the log store or stdout."""
-    key = "conformance-key-" + uuid.uuid4().hex
+    """The caller's key (raw or masked echo on 200 and 401) must never reach request_logs, request_log_payloads, or stdout."""
+    suffix = uuid.uuid4().hex[:12]
+    key = "sk-proj-conformance-" + suffix
+    masked_suffix = "****" + suffix[-4:]
+    masked_echo = "sk-proj-" + masked_suffix
+    SECRETS.extend([key, masked_echo])
+
     for model in ("gpt-conformance", "claude-conformance", "gemini-conformance"):
         reply = lab.call(fixture("text", model), key)
-        lab.row(reply)
+        row = lab.row(reply)
+        same([row["error"], row["has_payload"]], [None, False], model + " 200 error/has_payload")
+
+    error_cases = (
+        ("gpt-conformance", {"error": {"message": "Incorrect API key: %s (raw %s)" % (masked_echo, key),
+                                       "type": "invalid_request_error", "code": "invalid_api_key"}}),
+        ("claude-conformance", {"type": "error", "error": {"type": "authentication_error",
+                                                           "message": "invalid x-api-key: %s raw %s" % (masked_echo, key)}}),
+        ("gemini-conformance", [{"error": {"code": 401, "status": "UNAUTHENTICATED",
+                                           "message": "API key not valid: %s raw %s" % (masked_echo, key)}}]),
+    )
+    for model, err_payload in error_cases:
+        lab.stub.force(401, err_payload)
+        reply = lab.call(fixture("text", model), key)
+        same(reply.status, 401, model + " 401 status")
+        row = lab.row(reply)
+        same([row["http_status"], row["error"], row["has_payload"]], [401, None, False],
+             model + " 401 request_logs status/error/has_payload")
+
     lab.stub.take()
-    stored = lab.sql("SELECT count(*) FROM request_logs WHERE to_jsonb(request_logs)::text LIKE '%%%s%%'" % key)
-    same(stored, "0", "request_logs rows containing the caller's key")
-    expect(key not in docker("logs", lab.gateway, check=False), "the caller's key appears in the gateway's output")
+    gateway_logs = docker("logs", lab.gateway, check=False)
+    for marker in (key, masked_suffix):
+        stored_logs = lab.sql("SELECT count(*) FROM request_logs WHERE to_jsonb(request_logs)::text LIKE '%%%s%%'" % marker)
+        same(stored_logs, "0", "request_logs rows containing canary marker")
+        stored_payloads = lab.sql("SELECT count(*) FROM request_log_payloads WHERE to_jsonb(request_log_payloads)::text LIKE '%%%s%%'" % marker)
+        same(stored_payloads, "0", "request_log_payloads rows containing canary marker")
+        expect(marker not in gateway_logs, "canary credential marker appears in gateway container output")
+    same(lab.sql("SELECT count(*) FROM request_log_payloads"), "0", "request_log_payloads total rows")
+
+
+@stub_check
+def upstream_redirects_are_not_followed(lab):
+    """An upstream 3xx redirect must never cause agentgateway to follow Location or forward Authorization."""
+    key = "sk-proj-redirect-canary-" + uuid.uuid4().hex[:12]
+    SECRETS.append(key)
+    trap = stubs.Stub()
+    try:
+        trap_port = trap.start("127.0.0.1" if platform.system() == "Darwin" else "0.0.0.0")
+        lab.stub.force(307, {"redirect": True},
+                       {"location": "http://host.docker.internal:%d/openai/v1/responses" % trap_port})
+        reply = lab.call(fixture("text", "gpt-conformance"), key)
+        upstream(lab, OPENAI)
+        expect(reply.status != 200, "gateway answered 200 on an upstream 307 redirect")
+        same(trap.take(), [], "redirect trap requests")
+    finally:
+        trap.stop()
 
 
 # ---- live mode ---------------------------------------------------------------------------------
