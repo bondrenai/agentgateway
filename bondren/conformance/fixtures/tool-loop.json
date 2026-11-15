@@ -3,7 +3,7 @@
   "store": false,
   "max_output_tokens": 2048,
   "input": [
-    {"role": "user", "content": [{"type": "input_text", "text": "Work out 2 to the power of 7, then call probe_tool with echo set to that number written in digits."}]}
+    {"role": "user", "content": [{"type": "input_text", "text": "A farmer keeps chickens and rabbits. Together they have 35 heads and 94 legs. Work out how many rabbits there are, then call probe_tool with echo set to that number written in digits."}]}
   ],
   "tools": [
     {

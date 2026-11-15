@@ -712,10 +712,14 @@ def claude_tool_loop_with_thinking(lab, keys):
     """The provider verifies the signature of replayed thinking, so a 200 on the second step
     means the first step's reasoning survived the trip through the client."""
     first_body = fixture("tool-loop", CLAUDE_MODEL)
-    first = lab.call(first_body, keys["anthropic"], route="live").parsed()
-    expect(first["calls"], "the model did not call the tool")
-    expect(any(item["type"] == "reasoning" and item.get("encrypted_content") for item in first["replay"]),
-           "the reply carries no signed reasoning to replay")
+    # Thinking is adaptive: the model may answer without it, and then there is nothing to replay.
+    for _ in range(4):
+        first = lab.call(first_body, keys["anthropic"], route="live").parsed()
+        expect(first["calls"], "the model did not call the tool")
+        if any(item["type"] == "reasoning" and item.get("encrypted_content") for item in first["replay"]):
+            break
+    else:
+        raise Failed("the model returned no signed reasoning in four attempts, so its replay was not exercised")
     second_body = product.replay_input(first_body, first, "Recorded. Now reply with the single word done.")
     reply = lab.call(second_body, keys["anthropic"], route="live")
     parsed = reply.parsed()
