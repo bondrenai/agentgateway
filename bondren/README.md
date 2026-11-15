@@ -107,12 +107,21 @@ prints the digest. That digest is the release: record it in the product change t
 
 A tag is never moved or reused. To change a released image, tag the next `N`.
 
-Upstream's own workflows are disabled in this repository's Actions settings (`gh workflow
-disable`), because here they would publish upstream's artifacts under this organization or wait
-for runners it does not have: `Release` (`release.yml`, fires on `v*.*.*` tags), `Branch`
-(`pull_request.yml`, fires on pushes to `main`), `Nightly Release` (`nightly.yml`) and `Refresh
-model catalog` (`model-catalog.yml`), both scheduled. `gh workflow enable` turns one back on. The
-workflow files themselves are untouched.
+Upstream's own workflows must not run here: they would publish upstream's artifacts under this
+organization or wait for runners it does not have. GitHub has not registered any of them in this
+fork yet, because the fork's `main` has never been pushed to, so there is nothing to disable and
+nothing that can fire. The first push to `main` registers them and starts `Branch` once. Right
+after that first sync, cancel that run and disable them:
+
+```sh
+for w in release.yml pull_request.yml nightly.yml model-catalog.yml; do
+  gh workflow disable "$w" --repo bondrenai/agentgateway
+done
+```
+
+`Release` (`release.yml`) fires on `v*.*.*` tags and `Branch` (`pull_request.yml`) on pushes to
+`main`; `Nightly Release` and `Refresh model catalog` are scheduled. `gh workflow enable` reverses
+it. The workflow files themselves stay untouched.
 
 ## How the product consumes the image
 
@@ -121,6 +130,9 @@ The product pins the manifest-list digest, never a tag alone:
 ```yaml
 image: ghcr.io/bondrenai/agentgateway:bondren-v1.7.0-1@sha256:<digest from the workflow summary>
 ```
+
+The package is public, like this repository, so pulling it needs no login. If it is ever made
+private, every environment that pulls it needs a token with `read:packages`.
 
 The pin lives in the `inference-gateway` service of the product's `docker-compose.yml` and in its
 deployment manifests; both must carry the same digest. The gateway's configuration is the product's
@@ -166,7 +178,8 @@ git push origin upstream/main:main
 ```
 
 GitHub's "Sync fork" button does the same. If the push is rejected, something was committed to
-`main` that should not be there; move it to a branch rather than forcing. Do not push tags.
+`main` that should not be there; move it to a branch rather than forcing. Do not push tags. The
+first sync is also when upstream's workflows have to be disabled (see Releasing).
 
 ## When this fork ends
 
