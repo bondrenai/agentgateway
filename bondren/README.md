@@ -105,7 +105,7 @@ stub-mode conformance kit against each, pushes them, publishes the manifest list
 `ghcr.io/bondrenai/agentgateway:bondren-vX.Y.Z-N`, and attests build provenance. Its run summary
 prints the digest. That digest is the release: record it in the product change that adopts it.
 
-A tag is never moved or reused. To change a released image, tag the next `N`.
+A tag is never moved or reused. To change a released image, tag the next `N`. Two active GitHub repository rulesets on `bondrenai/agentgateway` enforce this on `refs/tags/bondren-v*`: `Immutable bondren-v* release tags` blocks tag deletion, updates, and non-fast-forward pushes with no bypass actors, and `Restrict bondren-v* release tag creation to admins` restricts new `bondren-v*` tag creation to Repository Admins.
 
 Upstream's own workflows must not run here: they would publish upstream's artifacts under this
 organization or wait for runners it does not have. GitHub has not registered any of them in this
