@@ -1,0 +1,21 @@
+{
+  "model": "MODEL",
+  "store": false,
+  "max_output_tokens": 256,
+  "input": [
+    {"role": "user", "content": [{"type": "input_text", "text": "Give the capital of France and its approximate population in millions."}]}
+  ],
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "city_fact",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}, "population_millions": {"type": "number"}},
+        "required": ["city", "population_millions"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

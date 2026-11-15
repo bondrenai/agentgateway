@@ -1,0 +1,23 @@
+{
+  "model": "MODEL",
+  "store": false,
+  "max_output_tokens": 2048,
+  "input": [
+    {"role": "user", "content": [{"type": "input_text", "text": "Work out 2 to the power of 7, then call probe_tool with echo set to that number written in digits."}]}
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "probe_tool",
+      "description": "Echo a word back.",
+      "parameters": {
+        "type": "object",
+        "properties": {"echo": {"type": "string"}},
+        "required": ["echo"],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  ],
+  "reasoning": {"effort": "high"}
+}

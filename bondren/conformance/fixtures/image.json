@@ -1,0 +1,15 @@
+{
+  "model": "MODEL",
+  "store": false,
+  "max_output_tokens": 64,
+  "instructions": "Answer with one lowercase word.",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "input_text", "text": "What colour is this square?"},
+        {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="}
+      ]
+    }
+  ]
+}

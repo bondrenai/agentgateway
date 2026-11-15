@@ -1,0 +1,5 @@
+{
+  "model": "MODEL",
+  "input": ["embed probe"],
+  "dimensions": 1536
+}
